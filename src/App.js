@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import origin from "./nameList.json";
+// import origin from "./nameList.json";
 import CongraModal from './CongraModal';
+
+const origin = Array(600).fill(1);
 
 const originData = origin.slice(0, 20)
   .map((name, index) => ({ name: index, id: index }));
