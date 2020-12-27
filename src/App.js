@@ -14,8 +14,9 @@ const initialSpeed = 8;
 
 
 
-function NameItem({ name }) {
-  return <div className="name-item">{name}</div>;
+function NameItem({ name, isLucky }) {
+  const cls = "name-item".concat(' ', isLucky ? 'name-item__lucky' : '');
+  return <div className={cls}>{name}</div>;
 }
 
 
@@ -26,9 +27,9 @@ const containerHeight = 650;
 function generateCycleData(data) {
   return data
   .slice(-1)
-  .map((item) => ({ ...item, id: "top-top-" + item.id })) // 1 项
-  .concat(data.map((item) => ({ ...item, id: "top-" + item.id }))) // n 项
-  .concat(data); // n 项
+  .map((item) => ({ ...item, cycleId: "top-top-" + item.id })) // 1 项
+  .concat(data.map((item) => ({ ...item, cycleId: "top-" + item.id }))) // n 项
+  .concat(data.map((item) => ({ ...item, cycleId: item.id }))); // n 项
 }
 
 export default function App() {
@@ -38,7 +39,8 @@ export default function App() {
   const [started, setStarted] = useState(false);
   const prevStarted = useRef(false);
   const [speed, setSpeed] = useState(0);
-  const [luckyOne, setLuckyOne] = useState();
+	const luckyOneRef = useRef();
+	const [showCongraModal, setShowCongraModal] = useState(false);
   const [awardRank, setAwardRank] = useState(0);
 
   const cycleNameList = useMemo(() => {
@@ -46,25 +48,26 @@ export default function App() {
   }, [nameList]);
 
 
-  
   const findLuckyOne = useCallback(() => {
-    let luckyOneIndex = Math.ceil(Math.abs(y - (nameList.length * singleHeight / 2)) / singleHeight);
-    luckyOneIndex = (luckyOneIndex + nameList.length) % nameList.length;
-    console.log('findLuckyOne ' + y + ', ' + luckyOneIndex)
-    const luckyOne = nameList[luckyOneIndex];
+    let luckyOneIndex = Math.floor(Math.abs(y - (containerHeight / 2)) / singleHeight);
+    console.log('findLuckyOne, y: ' + y + ', luckyOneIndex: ' + luckyOneIndex)
+    const luckyOne = cycleNameList[luckyOneIndex];
     setAwardRank(rank => {
-      console.log('setAwardRank ', rank, rank + 1)
+      console.log('setAwardRank ' + rank + 1)
       return rank + 1;
-    });
-    setLuckyOne(luckyOne);
-    setNameList(prev => prev.filter(item => item.id !== luckyOne.id));
-  }, [y, nameList]);
+		});
+		setShowCongraModal(true);
+		luckyOneRef.current = luckyOne
+  }, [y, cycleNameList]);
 
+  // 监听事件，改变started
   useEffect(() => {
     const handleSpaceDown = (event) => {
       if (event.code === "Space") {
-        if (luckyOne) {
-          setLuckyOne(null);
+        if (showCongraModal) {
+          setShowCongraModal(false);
+          // 清空已中奖的id
+          setNameList(prev => prev.filter(item => item.id !== luckyOneRef.current?.id));
         } else {
           setStarted((prev) => !prev);
         }
@@ -74,18 +77,17 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleSpaceDown);
     };
-  }, [luckyOne]);
+  }, [showCongraModal]);
   
+  // 用 started 控制 speed
   useEffect(() => {
     if (started !== prevStarted.current) {
       if (!started && prevStarted.current) {
         // 停止
-        console.log('停止');
+        console.log('按下停止按钮停止，逐渐减缓速度');
         const timer = setInterval(() => {
           setSpeed(prev => {
-            console.log('sub speed ', prev);
             if (prev === 1) {
-              findLuckyOne();
               window.clearInterval(timer)
             }
             return Math.max(0, prev - 1);
@@ -94,23 +96,36 @@ export default function App() {
    
       } else if (started && !prevStarted.current) {
         // 启动
-        console.log('启动');
-        setLuckyOne(null);
+        console.log('按下启动');
         setSpeed(initialSpeed);
       }
 
       prevStarted.current = started;
     }
-  }, [started, findLuckyOne])
+  }, [started])
 
 
+  // 检测speed的变化，
+  // if previous speed > 0 && current speed === 0 , it stopped
+  const prevSpeed = useRef(speed);
+  useEffect(() => {
+    if (prevSpeed.current !== speed) {
+      if (prevSpeed.current > 0 && speed === 0) {
+        findLuckyOne();
+      }
+      prevSpeed.current = speed;
+    }
+  }, [speed, findLuckyOne]);
+
+
+  // 用 speed 控制位移 y
   useEffect(() => {
     if (speed === 0) {
       return;
     }
     const timer = setInterval(() => {
       setY((prev) => {
-        let newy = prev += speed;
+        let newy = prev + speed;
         if (newy > 0) {
           newy = -nameList.length * singleHeight + newy;
         }
@@ -129,11 +144,10 @@ export default function App() {
     >
       <div style={{ transform: `translateY(${y}px)` }}>
         {cycleNameList.map((item) => (
-          <NameItem key={item.id} name={item.name} />
+          <NameItem key={item.cycleId} name={item.name} isLucky={luckyOneRef.current && luckyOneRef.current.id === item.id} />
         ))}
       </div>
-      {!!luckyOne && <CongraModal person={luckyOne} awardRank={awardRank} />}
-      <div className='list-middle' />
+      <CongraModal show={showCongraModal} person={luckyOneRef.current} awardRank={awardRank} />
     </div>
   );
 }
